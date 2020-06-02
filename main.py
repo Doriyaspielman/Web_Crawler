@@ -1,25 +1,52 @@
 from bs4 import BeautifulSoup
 import requests
-import csv
+from datetime import date
+import sys
+#import pymongo
 
-source = requests.get('http://coreyms.com').text
 
-soup = BeautifulSoup(source, 'lxml')
+# get and insert the data
+def get_data(source):
+    soup = BeautifulSoup(source, 'lxml')  # parsing
+    # go over every device
+    for device in soup.find_all('tr', class_=['even', 'odd']):
+        # extract and add device name
+        name = device.a.text
+        data['Device name'].append(name)
 
-csv_file = open('cms_scrape.csv', 'w')
+        # extract and add device version
+        version = device.find('td', class_='views-field views-field-field-android-version2').text.strip()
+        data['Version'].append(version)
 
-csv_writer = csv.writer(csv_file)
-csv_writer.writerow(['headline', 'summary'])
+        # add date
+        today = date.today().strftime("%d/%m/%y")
+        data['Build date'].append(today)
 
-for article in soup.find_all('article'):
-    headline = article.h2.a.text
-    print(headline)
+        # check if we are not at the last page
+    if soup.find('li', class_='pager-next last').find('a'):
+        global new_url
+        # update url for next page
+        new_url = soup.find('li', class_='pager-next last').find('a')['href']
+    else:
+        # if we got to the last pagee - stop while lop
+        new_url = 0
 
-    summary = article.find('div', class_='entry-content').p.text
-    print(summary)
 
-    print()
+data = {
+    'Device name': [],
+    'Version': [],
+    'Build date': []
+}
+# save the url from input
+baseUrl = sys.argv[1]
+# go to downloads page for the data
+src = requests.get(baseUrl + 'firmware-downloads').text
+get_data(src)
 
-    csv_writer.writerow([headline, summary])
+# go over all pages to get all the data
+while new_url != 0:
+    # request the new url
+    src = requests.get(baseUrl + new_url).text
+    get_data(src)
 
-csv_file.close()
+print(data)
