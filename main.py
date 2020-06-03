@@ -2,25 +2,38 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import date
 import sys
-#import pymongo
+import pymongo
+from pymongo import MongoClient
 
+data = []
+
+
+# get mongodb collection
+def mongo_connection():
+    cluster = MongoClient("mongodb+srv://doriyaspielman:1234@cluster0-spfhl.mongodb.net/test?retryWrites=true&w=majority")
+    db = cluster["firmware_data"]
+    collection = db["firmware"]
+    return collection
 
 # get and insert the data
-def get_data(source):
+def get_data(source, date ,colection):
     soup = BeautifulSoup(source, 'lxml')  # parsing
     # go over every device
-    for device in soup.find_all('tr', class_=['even', 'odd']):
+    for product in soup.find_all('tr', class_=['even', 'odd']):
         # extract and add device name
-        name = device.a.text
-        data['Device name'].append(name)
+        name = product.a.text
 
-        # extract and add device version
-        version = device.find('td', class_='views-field views-field-field-android-version2').text.strip()
-        data['Version'].append(version)
+        # extract version
+        version = product.find('td', class_='views-field views-field-field-android-version2').text.strip()
 
-        # add date
-        today = date.today().strftime("%d/%m/%y")
-        data['Build date'].append(today)
+        info = {
+            'Device name': name,
+            'Version': version,
+            'Build date': date
+        }
+        # check if the document exists
+        if colection.count_documents(info) == 0:
+            data.append(info)
 
         # check if we are not at the last page
     if soup.find('li', class_='pager-next last').find('a'):
@@ -32,21 +45,26 @@ def get_data(source):
         new_url = 0
 
 
-data = {
-    'Device name': [],
-    'Version': [],
-    'Build date': []
-}
 # save the url from input
 baseUrl = sys.argv[1]
 # go to downloads page for the data
 src = requests.get(baseUrl + 'firmware-downloads').text
-get_data(src)
+header = requests.head(baseUrl + 'firmware-downloads').headers
+# get build date from page header
+if 'Last-Modified' in header:
+    last_modified = header['Last-Modified']
+col = mongo_connection()
+get_data(src, last_modified, col)
+
 
 # go over all pages to get all the data
 while new_url != 0:
     # request the new url
     src = requests.get(baseUrl + new_url).text
-    get_data(src)
-
-print(data)
+    header = requests.head(baseUrl + new_url).headers
+    if 'Last-Modified' in header:
+        last_modified = header['Last-Modified']
+    get_data(src, last_modified, col)
+# if data is not empty - insert to database
+if data:
+    col.insert(data)
