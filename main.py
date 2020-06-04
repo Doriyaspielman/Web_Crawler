@@ -1,19 +1,17 @@
 from bs4 import BeautifulSoup
 import requests
-from datetime import date
 import sys
-import pymongo
 from pymongo import MongoClient
 
 data = []
 
 
-# get mongodb collection
+# connect to mongodb and get the collection
 def mongo_connection():
     cluster = MongoClient("mongodb+srv://doriyaspielman:1234@cluster0-spfhl.mongodb.net/test?retryWrites=true&w=majority")
     db = cluster["firmware_data"]
-    collection = db["firmware"]
-    return collection
+    firmware_collection = db["firmware"]
+    return firmware_collection
 
 # get and insert the data
 def get_data(source, date ,colection):
@@ -45,26 +43,31 @@ def get_data(source, date ,colection):
         new_url = 0
 
 
+def get_build_date(url):
+    last_modified = ""
+    header = requests.head(url).headers
+    # get build date from page header
+    if 'Last-Modified' in header:
+        last_modified = header['Last-Modified']
+    return last_modified
+
+
 # save the url from input
 baseUrl = sys.argv[1]
 # go to downloads page for the data
 src = requests.get(baseUrl + 'firmware-downloads').text
-header = requests.head(baseUrl + 'firmware-downloads').headers
-# get build date from page header
-if 'Last-Modified' in header:
-    last_modified = header['Last-Modified']
+build_date = get_build_date(baseUrl + 'firmware-downloads')
 col = mongo_connection()
-get_data(src, last_modified, col)
+get_data(src, build_date, col)
 
 
 # go over all pages to get all the data
 while new_url != 0:
     # request the new url
     src = requests.get(baseUrl + new_url).text
-    header = requests.head(baseUrl + new_url).headers
-    if 'Last-Modified' in header:
-        last_modified = header['Last-Modified']
-    get_data(src, last_modified, col)
+    build_date = get_build_date(baseUrl + new_url)
+    get_data(src, build_date, col)
 # if data is not empty - insert to database
 if data:
     col.insert(data)
+
