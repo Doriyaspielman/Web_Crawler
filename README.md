@@ -1,7 +1,7 @@
 # Web_Crawler
 Implement a web crawler in Python that browses a vendor website, downloads firmware files, and fetches their metadata. 
  
-## Installation
+## How to use?
 Run command:
 ```bash
 python3 main.py https://www.rockchipfirmware.com/
