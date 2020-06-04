@@ -16,6 +16,7 @@ def mongo_connection():
 # check if the url exists and if the website has changed
 def check_ur(collection, url , date):
     old_date = ""
+    result = ""
     src = requests.get(url).text
     # parsing
     soup = BeautifulSoup(src, 'lxml')
@@ -27,19 +28,18 @@ def check_ur(collection, url , date):
             old_date = a['build date']
         # if the website is modified - than update
         if old_date != date:
-            get_data(soup)
+            get_data(soup, result)
         else:
             next_page(soup)
     # if the url data doesnt exists get the data (first run on that url)
     else:
-        get_data(soup)
+        get_data(soup, result)
 
 
 # get and insert the data
-def get_data(soup):
+def get_data(soup, old_data):
     global data
     data = []
-
     # go over every product in the table
     for product in soup.find_all('tr', class_=['even', 'odd']):
         # extract and add device name
@@ -52,8 +52,17 @@ def get_data(soup):
             'Device name': name,
             'Version': version
         }
-
-        data.append(info)
+        # if there is old data - check if the object already exists
+        if old_data != "":
+            for d in old_data:
+                product_list = d['data']
+        for p in product_list:
+            # if the object is different than insert
+            if p != info:
+                data.append(info)
+        # if there is no data - insert all
+        else:
+            data.append(info)
 
     next_page(soup)
 
