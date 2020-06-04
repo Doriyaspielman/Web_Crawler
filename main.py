@@ -3,7 +3,6 @@ import requests
 import sys
 from pymongo import MongoClient
 
-data = []
 
 
 # connect to mongodb and get the collection
@@ -13,10 +12,35 @@ def mongo_connection():
     firmware_collection = db["firmware"]
     return firmware_collection
 
+
+# check if the url exists and if the website has changed
+def check_ur(collection, url , date):
+    old_date = ""
+    src = requests.get(url).text
+    # parsing
+    soup = BeautifulSoup(src, 'lxml')
+    # if the document of the url exists
+    if collection.find_one({"url": url}):
+        result = collection.find({"url": url})
+        # get the last modified from the database
+        for a in result:
+            old_date = a['build date']
+        # if the website is modified - than update
+        if old_date != date:
+            get_data(soup)
+        else:
+            next_page(soup)
+    # if the url data doesnt exists get the data (first run on that url)
+    else:
+        get_data(soup)
+
+
 # get and insert the data
-def get_data(source, date ,colection):
-    soup = BeautifulSoup(source, 'lxml')  # parsing
-    # go over every device
+def get_data(soup):
+    global data
+    data = []
+
+    # go over every product in the table
     for product in soup.find_all('tr', class_=['even', 'odd']):
         # extract and add device name
         name = product.a.text
@@ -26,21 +50,23 @@ def get_data(source, date ,colection):
 
         info = {
             'Device name': name,
-            'Version': version,
-            'Build date': date
+            'Version': version
         }
-        # check if the document exists
-        if colection.count_documents(info) == 0:
-            data.append(info)
 
-        # check if we are not at the last page
+        data.append(info)
+
+    next_page(soup)
+
+
+def next_page(soup):
+    global new_url
+    # check if we are not at the last page
     if soup.find('li', class_='pager-next last').find('a'):
-        global new_url
         # update url for next page
         new_url = soup.find('li', class_='pager-next last').find('a')['href']
     else:
         # if we got to the last pagee - stop while lop
-        new_url = 0
+        new_url = "done"
 
 
 def get_build_date(url):
@@ -54,20 +80,22 @@ def get_build_date(url):
 
 # save the url from input
 baseUrl = sys.argv[1]
-# go to downloads page for the data
-src = requests.get(baseUrl + 'firmware-downloads').text
-build_date = get_build_date(baseUrl + 'firmware-downloads')
+first_url = baseUrl + 'firmware-downloads'
+data = []
+build_date = get_build_date(first_url)
 col = mongo_connection()
-get_data(src, build_date, col)
-
-
-# go over all pages to get all the data
-while new_url != 0:
-    # request the new url
-    src = requests.get(baseUrl + new_url).text
-    build_date = get_build_date(baseUrl + new_url)
-    get_data(src, build_date, col)
+check_ur(col, first_url, build_date)
 # if data is not empty - insert to database
 if data:
-    col.insert(data)
+    col.insert_one({'url': first_url, 'build date': build_date, 'data': data})
+
+# go over all pages to get all the data
+while new_url != "done":
+    # request the new url
+    build_date = get_build_date(baseUrl + new_url)
+    curr_url = baseUrl + new_url
+    check_ur(col, baseUrl + new_url, build_date)
+# if data is not empty - insert to database
+    if data:
+        col.insert_one({'url': curr_url, 'build date': build_date, 'data': data})
 
