@@ -57,7 +57,7 @@ def get_data(soup, old_data):
             for d in old_data:
                 product_list = d['data']
         for p in product_list:
-            # if the object is different than insert
+            # if the object is different - than insert
             if p != info:
                 data.append(info)
         # if there is no data - insert all
